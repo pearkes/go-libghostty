@@ -90,6 +90,35 @@ type RenderStateColors struct {
 	Palette Palette
 }
 
+// RenderStateDefaultColors holds default/current color information from a render state,
+// retrieved without copying the full 256-color palette.
+// C: GhosttyRenderStateDefaultColors
+type RenderStateDefaultColors struct {
+	// Background is the default/current background color when explicitly
+	// present in terminal state. Only valid when BackgroundHasValue is true.
+	Background ColorRGB
+
+	// BackgroundHasValue is true when Background contains a valid explicit
+	// background color value.
+	BackgroundHasValue bool
+
+	// Foreground is the default/current foreground color when explicitly
+	// present in terminal state. Only valid when ForegroundHasValue is true.
+	Foreground ColorRGB
+
+	// ForegroundHasValue is true when Foreground contains a valid explicit
+	// foreground color value.
+	ForegroundHasValue bool
+
+	// Cursor is the cursor color when explicitly set by terminal state.
+	// Only valid when CursorHasValue is true.
+	Cursor ColorRGB
+
+	// CursorHasValue is true when Cursor contains a valid explicit cursor
+	// color value.
+	CursorHasValue bool
+}
+
 // NewRenderState creates a new empty render state.
 func NewRenderState() (*RenderState, error) {
 	var ptr C.GhosttyRenderState

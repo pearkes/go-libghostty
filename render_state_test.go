@@ -135,6 +135,62 @@ func TestRenderStateColors(t *testing.T) {
 	}
 }
 
+func TestRenderStateDefaultColors(t *testing.T) {
+	term, err := NewTerminal(WithSize(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	rs, err := NewRenderState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rs.Close()
+
+	if err := rs.Update(term); err != nil {
+		t.Fatal(err)
+	}
+
+	defaults, err := rs.DefaultColors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.ForegroundHasValue || defaults.BackgroundHasValue || defaults.CursorHasValue {
+		t.Fatalf("expected unset defaults, got %+v", defaults)
+	}
+
+	red := &ColorRGB{R: 255, G: 0, B: 0}
+	blue := &ColorRGB{R: 0, G: 0, B: 255}
+	green := &ColorRGB{R: 0, G: 255, B: 0}
+	if err := term.SetColorForeground(red); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SetColorBackground(blue); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SetColorCursor(green); err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.Update(term); err != nil {
+		t.Fatal(err)
+	}
+
+	defaults, err = rs.DefaultColors()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !defaults.ForegroundHasValue || defaults.Foreground != *red {
+		t.Fatalf("expected foreground %+v, got %+v", *red, defaults)
+	}
+	if !defaults.BackgroundHasValue || defaults.Background != *blue {
+		t.Fatalf("expected background %+v, got %+v", *blue, defaults)
+	}
+	if !defaults.CursorHasValue || defaults.Cursor != *green {
+		t.Fatalf("expected cursor %+v, got %+v", *green, defaults)
+	}
+}
+
 func TestRenderStateCursor(t *testing.T) {
 	term, err := NewTerminal(WithSize(80, 24))
 	if err != nil {

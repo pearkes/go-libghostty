@@ -12,6 +12,13 @@ static inline GhosttyRenderStateColors init_render_state_colors() {
 	GhosttyRenderStateColors c = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
 	return c;
 }
+
+// Helper to create a properly initialized GhosttyRenderStateDefaultColors
+// (sized struct).
+static inline GhosttyRenderStateDefaultColors init_render_state_default_colors() {
+	GhosttyRenderStateDefaultColors c = GHOSTTY_INIT_SIZED(GhosttyRenderStateDefaultColors);
+	return c;
+}
 */
 import "C"
 
@@ -179,6 +186,24 @@ func (rs *RenderState) Colors() (*RenderStateColors, error) {
 		result.Palette[i] = ColorRGB{R: uint8(c.r), G: uint8(c.g), B: uint8(c.b)}
 	}
 	return result, nil
+}
+
+// DefaultColors returns default/current color information from the render state
+// without copying the full 256-color palette.
+func (rs *RenderState) DefaultColors() (RenderStateDefaultColors, error) {
+	cc := C.init_render_state_default_colors()
+	if err := resultError(C.ghostty_render_state_default_colors_get(rs.ptr, &cc)); err != nil {
+		return RenderStateDefaultColors{}, err
+	}
+
+	return RenderStateDefaultColors{
+		Background:         ColorRGB{R: uint8(cc.background.r), G: uint8(cc.background.g), B: uint8(cc.background.b)},
+		BackgroundHasValue: bool(cc.background_has_value),
+		Foreground:         ColorRGB{R: uint8(cc.foreground.r), G: uint8(cc.foreground.g), B: uint8(cc.foreground.b)},
+		ForegroundHasValue: bool(cc.foreground_has_value),
+		Cursor:             ColorRGB{R: uint8(cc.cursor.r), G: uint8(cc.cursor.g), B: uint8(cc.cursor.b)},
+		CursorHasValue:     bool(cc.cursor_has_value),
+	}, nil
 }
 
 // GetMulti queries multiple render state data fields in a single cgo
