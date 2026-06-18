@@ -48,6 +48,25 @@ type Terminal struct {
 // TerminalOption is a functional option for configuring a Terminal.
 type TerminalOption func(*TerminalConfig)
 
+// TerminalCursorStyle describes the default visual style of the terminal
+// cursor. It is used by DECSCUSR reset (CSI 0 q).
+// C: GhosttyTerminalCursorStyle
+type TerminalCursorStyle int
+
+const (
+	// TerminalCursorStyleBar is a vertical bar cursor.
+	TerminalCursorStyleBar TerminalCursorStyle = C.GHOSTTY_TERMINAL_CURSOR_STYLE_BAR
+
+	// TerminalCursorStyleBlock is a filled block cursor.
+	TerminalCursorStyleBlock TerminalCursorStyle = C.GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK
+
+	// TerminalCursorStyleUnderline is an underline cursor.
+	TerminalCursorStyleUnderline TerminalCursorStyle = C.GHOSTTY_TERMINAL_CURSOR_STYLE_UNDERLINE
+
+	// TerminalCursorStyleBlockHollow is a hollow block cursor.
+	TerminalCursorStyleBlockHollow TerminalCursorStyle = C.GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK_HOLLOW
+)
+
 // TerminalConfig holds the configuration for creating a Terminal.
 // It can be passed directly to NewTerminal or built up using
 // functional options like WithSize and WithMaxScrollback.
@@ -62,6 +81,14 @@ type TerminalConfig struct {
 	// MaxScrollback is the maximum number of lines to keep in scrollback
 	// history. Defaults to 0 (no scrollback).
 	MaxScrollback uint
+
+	// DefaultCursorStyle is the cursor style used by DECSCUSR reset
+	// (CSI 0 q). Nil keeps libghostty's built-in default block cursor.
+	DefaultCursorStyle *TerminalCursorStyle
+
+	// DefaultCursorBlink controls whether the cursor blinks after DECSCUSR
+	// reset (CSI 0 q). Nil keeps libghostty's built-in steady cursor default.
+	DefaultCursorBlink *bool
 
 	// Effect handlers applied after terminal creation.
 	onWritePty         WritePtyFn
@@ -135,6 +162,22 @@ func WithSize(cols, rows uint16) TerminalOption {
 func WithMaxScrollback(lines uint) TerminalOption {
 	return func(c *TerminalConfig) {
 		c.MaxScrollback = lines
+	}
+}
+
+// WithDefaultCursorStyle sets the default visual cursor style used by
+// DECSCUSR reset (CSI 0 q).
+func WithDefaultCursorStyle(style TerminalCursorStyle) TerminalOption {
+	return func(c *TerminalConfig) {
+		c.DefaultCursorStyle = &style
+	}
+}
+
+// WithDefaultCursorBlink sets whether the cursor should blink after DECSCUSR
+// reset (CSI 0 q).
+func WithDefaultCursorBlink(blink bool) TerminalOption {
+	return func(c *TerminalConfig) {
+		c.DefaultCursorBlink = &blink
 	}
 }
 
@@ -248,6 +291,19 @@ func NewTerminal(opts ...TerminalOption) (*Terminal, error) {
 		C.GHOSTTY_TERMINAL_OPT_USERDATA,
 		handleToPointer(t.handle),
 	)
+
+	if cfg.DefaultCursorStyle != nil {
+		if err := t.SetDefaultCursorStyle(cfg.DefaultCursorStyle); err != nil {
+			t.Close()
+			return nil, err
+		}
+	}
+	if cfg.DefaultCursorBlink != nil {
+		if err := t.SetDefaultCursorBlink(cfg.DefaultCursorBlink); err != nil {
+			t.Close()
+			return nil, err
+		}
+	}
 
 	// Register any effects that were provided via options.
 	t.syncEffects()

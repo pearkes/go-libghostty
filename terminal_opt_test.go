@@ -67,6 +67,69 @@ func TestTerminalSetColors(t *testing.T) {
 	}
 }
 
+func TestTerminalSetDefaultCursorStyleAndBlink(t *testing.T) {
+	term, err := NewTerminal(WithSize(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	rs, err := NewRenderState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rs.Close()
+
+	cursor := func() (CursorVisualStyle, bool) {
+		t.Helper()
+		if err := rs.Update(term); err != nil {
+			t.Fatal(err)
+		}
+		style, err := rs.CursorVisualStyle()
+		if err != nil {
+			t.Fatal(err)
+		}
+		blink, err := rs.CursorBlinking()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return style, blink
+	}
+
+	style := TerminalCursorStyleBar
+	blink := true
+	if err := term.SetDefaultCursorStyle(&style); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SetDefaultCursorBlink(&blink); err != nil {
+		t.Fatal(err)
+	}
+
+	if gotStyle, gotBlink := cursor(); gotStyle != CursorVisualStyleBar || !gotBlink {
+		t.Fatalf("cursor = (%v, %v), want (bar, true)", gotStyle, gotBlink)
+	}
+
+	term.VTWrite([]byte("\x1b[2 q"))
+	if gotStyle, gotBlink := cursor(); gotStyle != CursorVisualStyleBlock || gotBlink {
+		t.Fatalf("explicit cursor = (%v, %v), want (block, false)", gotStyle, gotBlink)
+	}
+
+	term.VTWrite([]byte("\x1b[0 q"))
+	if gotStyle, gotBlink := cursor(); gotStyle != CursorVisualStyleBar || !gotBlink {
+		t.Fatalf("reset cursor = (%v, %v), want (bar, true)", gotStyle, gotBlink)
+	}
+
+	if err := term.SetDefaultCursorStyle(nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SetDefaultCursorBlink(nil); err != nil {
+		t.Fatal(err)
+	}
+	if gotStyle, gotBlink := cursor(); gotStyle != CursorVisualStyleBlock || gotBlink {
+		t.Fatalf("cleared cursor = (%v, %v), want (block, false)", gotStyle, gotBlink)
+	}
+}
+
 func TestTerminalSetAPCMaxBytes(t *testing.T) {
 	term, err := NewTerminal(WithSize(80, 24))
 	if err != nil {

@@ -129,6 +129,37 @@ func (t *Terminal) SetColorPalette(palette *Palette) error {
 	))
 }
 
+// SetDefaultCursorStyle sets the default cursor style used by DECSCUSR reset
+// (CSI 0 q). Pass nil to reset to libghostty's built-in default block cursor.
+func (t *Terminal) SetDefaultCursorStyle(style *TerminalCursorStyle) error {
+	var val unsafe.Pointer
+	if style != nil {
+		cs := C.GhosttyTerminalCursorStyle(*style)
+		val = unsafe.Pointer(&cs)
+	}
+	return resultError(C.ghostty_terminal_set(
+		t.ptr,
+		C.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE,
+		val,
+	))
+}
+
+// SetDefaultCursorBlink sets whether the default cursor should blink after
+// DECSCUSR reset (CSI 0 q). Pass nil to reset to libghostty's built-in steady
+// cursor default.
+func (t *Terminal) SetDefaultCursorBlink(blink *bool) error {
+	var val unsafe.Pointer
+	if blink != nil {
+		v := C.bool(*blink)
+		val = unsafe.Pointer(&v)
+	}
+	return resultError(C.ghostty_terminal_set(
+		t.ptr,
+		C.GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_BLINK,
+		val,
+	))
+}
+
 // SetAPCMaxBytes sets the maximum bytes the APC handler will buffer for
 // all protocols. Passing nil removes all overrides and reverts to the
 // built-in defaults.
