@@ -28,16 +28,17 @@ type Terminal struct {
 	// dispatch to the appropriate Go effect handler.
 	handle cgo.Handle
 
-	onWritePty         WritePtyFn
-	onBell             BellFn
-	onClipboardWrite   ClipboardWriteFn
-	onTitleChanged     TitleChangedFn
-	onPwdChanged       PwdChangedFn
-	onEnquiry          EnquiryFn
-	onXtversion        XtversionFn
-	onSize             SizeFn
-	onColorScheme      ColorSchemeFn
-	onDeviceAttributes DeviceAttributesFn
+	onWritePty            WritePtyFn
+	onBell                BellFn
+	onClipboardWrite      ClipboardWriteFn
+	onDesktopNotification DesktopNotificationFn
+	onTitleChanged        TitleChangedFn
+	onPwdChanged          PwdChangedFn
+	onEnquiry             EnquiryFn
+	onXtversion           XtversionFn
+	onSize                SizeFn
+	onColorScheme         ColorSchemeFn
+	onDeviceAttributes    DeviceAttributesFn
 
 	// effectBuf holds C-allocated memory for the most recent response
 	// returned by an effect trampoline (e.g. enquiry, xtversion).
@@ -69,16 +70,17 @@ type TerminalConfig struct {
 	MaxScrollbackLines *uint
 
 	// Effect handlers applied after terminal creation.
-	onWritePty         WritePtyFn
-	onBell             BellFn
-	onClipboardWrite   ClipboardWriteFn
-	onTitleChanged     TitleChangedFn
-	onPwdChanged       PwdChangedFn
-	onEnquiry          EnquiryFn
-	onXtversion        XtversionFn
-	onSize             SizeFn
-	onColorScheme      ColorSchemeFn
-	onDeviceAttributes DeviceAttributesFn
+	onWritePty            WritePtyFn
+	onBell                BellFn
+	onClipboardWrite      ClipboardWriteFn
+	onDesktopNotification DesktopNotificationFn
+	onTitleChanged        TitleChangedFn
+	onPwdChanged          PwdChangedFn
+	onEnquiry             EnquiryFn
+	onXtversion           XtversionFn
+	onSize                SizeFn
+	onColorScheme         ColorSchemeFn
+	onDeviceAttributes    DeviceAttributesFn
 }
 
 // WritePtyFn is called when the terminal writes data back to the pty
@@ -167,6 +169,23 @@ const (
 // the result of attempting the write.
 // C: GhosttyTerminalClipboardWriteFn
 type ClipboardWriteFn func(t *Terminal, write ClipboardWrite) ClipboardWriteResult
+
+// DesktopNotification is a literal desktop-notification request parsed from
+// OSC 9 or OSC 777. OSC 9 omits Title and supplies only Body. Both strings are
+// copied into Go-owned memory before the callback runs and may be retained.
+// C: GhosttyTerminalDesktopNotification
+type DesktopNotification struct {
+	// Title is the notification title, or empty when the protocol omits it.
+	Title string
+
+	// Body is the notification body.
+	Body string
+}
+
+// DesktopNotificationFn is called synchronously when the running program
+// requests a desktop notification via OSC 9 or OSC 777.
+// C: GhosttyTerminalDesktopNotificationFn
+type DesktopNotificationFn func(t *Terminal, notification DesktopNotification)
 
 // TitleChangedFn is called when the terminal title changes via OSC 0/2.
 // The parameter is the terminal that triggered the effect.
@@ -258,6 +277,14 @@ func WithBell(fn BellFn) TerminalOption {
 func WithClipboardWrite(fn ClipboardWriteFn) TerminalOption {
 	return func(c *TerminalConfig) {
 		c.onClipboardWrite = fn
+	}
+}
+
+// WithDesktopNotification registers an effect handler invoked for literal
+// desktop-notification requests parsed from OSC 9 or OSC 777.
+func WithDesktopNotification(fn DesktopNotificationFn) TerminalOption {
+	return func(c *TerminalConfig) {
+		c.onDesktopNotification = fn
 	}
 }
 
@@ -368,17 +395,18 @@ func NewTerminal(opts ...TerminalOption) (*Terminal, error) {
 	}
 
 	t := &Terminal{
-		ptr:                cterm,
-		onWritePty:         cfg.onWritePty,
-		onBell:             cfg.onBell,
-		onClipboardWrite:   cfg.onClipboardWrite,
-		onTitleChanged:     cfg.onTitleChanged,
-		onPwdChanged:       cfg.onPwdChanged,
-		onEnquiry:          cfg.onEnquiry,
-		onXtversion:        cfg.onXtversion,
-		onSize:             cfg.onSize,
-		onColorScheme:      cfg.onColorScheme,
-		onDeviceAttributes: cfg.onDeviceAttributes,
+		ptr:                   cterm,
+		onWritePty:            cfg.onWritePty,
+		onBell:                cfg.onBell,
+		onClipboardWrite:      cfg.onClipboardWrite,
+		onDesktopNotification: cfg.onDesktopNotification,
+		onTitleChanged:        cfg.onTitleChanged,
+		onPwdChanged:          cfg.onPwdChanged,
+		onEnquiry:             cfg.onEnquiry,
+		onXtversion:           cfg.onXtversion,
+		onSize:                cfg.onSize,
+		onColorScheme:         cfg.onColorScheme,
+		onDeviceAttributes:    cfg.onDeviceAttributes,
 	}
 
 	// Always set userdata to our handle so trampolines can find us.

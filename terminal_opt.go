@@ -31,6 +31,13 @@ func (t *Terminal) SetEffectClipboardWrite(fn ClipboardWriteFn) {
 	t.syncEffects()
 }
 
+// SetEffectDesktopNotification registers (or clears) the desktop-notification
+// effect on a live terminal. Pass nil to clear.
+func (t *Terminal) SetEffectDesktopNotification(fn DesktopNotificationFn) {
+	t.onDesktopNotification = fn
+	t.syncEffects()
+}
+
 // SetEffectTitleChanged registers (or clears) the title-changed effect
 // on a live terminal. Pass nil to clear.
 func (t *Terminal) SetEffectTitleChanged(fn TitleChangedFn) {

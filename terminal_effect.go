@@ -15,6 +15,7 @@ package libghostty
 extern void goWritePtyTrampoline(GhosttyTerminal, void*, uint8_t*, size_t);
 extern void goBellTrampoline(GhosttyTerminal, void*);
 extern GhosttyClipboardWriteResult goClipboardWriteTrampoline(GhosttyTerminal, void*, GhosttyClipboardWrite*);
+extern void goDesktopNotificationTrampoline(GhosttyTerminal, void*, GhosttyTerminalDesktopNotification*);
 extern void goTitleChangedTrampoline(GhosttyTerminal, void*);
 extern void goPwdChangedTrampoline(GhosttyTerminal, void*);
 extern GhosttyString goEnquiryTrampoline(GhosttyTerminal, void*);
@@ -34,6 +35,9 @@ static inline GhosttyResult set_bell(GhosttyTerminal t) {
 }
 static inline GhosttyResult set_clipboard_write(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, (const void*)goClipboardWriteTrampoline);
+}
+static inline GhosttyResult set_desktop_notification(GhosttyTerminal t) {
+	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)goDesktopNotificationTrampoline);
 }
 static inline GhosttyResult set_title_changed(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)goTitleChangedTrampoline);
@@ -86,6 +90,11 @@ func (t *Terminal) syncEffects() {
 		C.set_clipboard_write(t.ptr)
 	} else {
 		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE)
+	}
+	if t.onDesktopNotification != nil {
+		C.set_desktop_notification(t.ptr)
+	} else {
+		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION)
 	}
 	if t.onTitleChanged != nil {
 		C.set_title_changed(t.ptr)
@@ -160,7 +169,7 @@ func goClipboardWriteTrampoline(_ C.GhosttyTerminal, userdata unsafe.Pointer, wr
 		return C.GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA
 	}
 
-	count, ok := clipboardSizeToInt(write.contents_len)
+	count, ok := ghosttySizeToInt(write.contents_len)
 	if !ok || (count > 0 && write.contents == nil) {
 		return C.GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA
 	}
@@ -169,11 +178,11 @@ func goClipboardWriteTrampoline(_ C.GhosttyTerminal, userdata unsafe.Pointer, wr
 	if count > 0 {
 		cContents := unsafe.Slice(write.contents, count)
 		for i, content := range cContents {
-			mime, valid := copyClipboardString(content.mime)
+			mime, valid := copyGhosttyString(content.mime)
 			if !valid {
 				return C.GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA
 			}
-			data, valid := copyClipboardString(content.data)
+			data, valid := copyGhosttyString(content.data)
 			if !valid {
 				return C.GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA
 			}
@@ -192,20 +201,20 @@ func goClipboardWriteTrampoline(_ C.GhosttyTerminal, userdata unsafe.Pointer, wr
 	return C.GhosttyClipboardWriteResult(result)
 }
 
-// clipboardSizeToInt converts a C size to a Go slice length without allowing
+// ghosttySizeToInt converts a C size to a Go slice length without allowing
 // an overflowing conversion to produce an invalid unsafe.Slice length.
-func clipboardSizeToInt(size C.size_t) (int, bool) {
+func ghosttySizeToInt(size C.size_t) (int, bool) {
 	if uint64(size) > uint64(^uint(0)>>1) {
 		return 0, false
 	}
 	return int(size), true
 }
 
-// copyClipboardString copies a borrowed, binary-safe GhosttyString into Go
+// copyGhosttyString copies a borrowed, binary-safe GhosttyString into Go
 // memory. For zero-length strings the pointer is intentionally ignored because
 // libghostty does not require it to be valid.
-func copyClipboardString(value C.GhosttyString) ([]byte, bool) {
-	length, ok := clipboardSizeToInt(value.len)
+func copyGhosttyString(value C.GhosttyString) ([]byte, bool) {
+	length, ok := ghosttySizeToInt(value.len)
 	if !ok {
 		return nil, false
 	}
@@ -217,6 +226,38 @@ func copyClipboardString(value C.GhosttyString) ([]byte, bool) {
 	}
 
 	return append([]byte(nil), unsafe.Slice((*byte)(unsafe.Pointer(value.ptr)), length)...), true
+}
+
+//export goDesktopNotificationTrampoline
+func goDesktopNotificationTrampoline(
+	_ C.GhosttyTerminal,
+	userdata unsafe.Pointer,
+	notification *C.GhosttyTerminalDesktopNotification,
+) {
+	t := terminalFromUserdata(userdata)
+	if t.onDesktopNotification == nil {
+		return
+	}
+
+	// The notification is a sized struct so newer libghostty versions can
+	// extend it without invalidating the fields this binding understands.
+	if notification == nil || notification.size < C.size_t(C.sizeof_GhosttyTerminalDesktopNotification) {
+		return
+	}
+
+	title, ok := copyGhosttyString(notification.title)
+	if !ok {
+		return
+	}
+	body, ok := copyGhosttyString(notification.body)
+	if !ok {
+		return
+	}
+
+	t.onDesktopNotification(t, DesktopNotification{
+		Title: string(title),
+		Body:  string(body),
+	})
 }
 
 //export goTitleChangedTrampoline

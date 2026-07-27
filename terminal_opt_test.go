@@ -242,6 +242,76 @@ func TestTerminalSetEffectClipboardWrite(t *testing.T) {
 	}
 }
 
+func TestTerminalWithDesktopNotification(t *testing.T) {
+	var notifications []DesktopNotification
+	var callbackTerminal *Terminal
+	term, err := NewTerminal(
+		WithSize(80, 24),
+		WithDesktopNotification(func(got *Terminal, notification DesktopNotification) {
+			callbackTerminal = got
+			notifications = append(notifications, notification)
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	// OSC 777 preserves separate title and body fields across PTY reads.
+	term.VTWrite([]byte("\x1b]777;notify;Codex;Needs "))
+	term.VTWrite([]byte("attention\x1b\\"))
+	if len(notifications) != 1 {
+		t.Fatalf("expected 1 desktop notification, got %d", len(notifications))
+	}
+	if callbackTerminal != term {
+		t.Fatal("expected callback to receive the originating terminal")
+	}
+	if got := notifications[0]; got.Title != "Codex" || got.Body != "Needs attention" {
+		t.Fatalf("unexpected OSC 777 notification: %#v", got)
+	}
+
+	// OSC 9 has no title and carries its payload as the body.
+	term.VTWrite([]byte("\x1b]9;Build complete\x07"))
+	if len(notifications) != 2 {
+		t.Fatalf("expected 2 desktop notifications, got %d", len(notifications))
+	}
+	if got := notifications[1]; got.Title != "" || got.Body != "Build complete" {
+		t.Fatalf("unexpected OSC 9 notification: %#v", got)
+	}
+
+	// Callback strings are Go-owned and survive parser-buffer reuse.
+	if got := notifications[0]; got.Title != "Codex" || got.Body != "Needs attention" {
+		t.Fatalf("expected retained notification, got %#v", got)
+	}
+}
+
+func TestTerminalSetEffectDesktopNotification(t *testing.T) {
+	term, err := NewTerminal(WithSize(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	var count int
+	term.SetEffectDesktopNotification(func(_ *Terminal, notification DesktopNotification) {
+		count++
+		if notification.Body != "Ready" {
+			t.Errorf("expected notification body Ready, got %q", notification.Body)
+		}
+	})
+
+	term.VTWrite([]byte("\x1b]9;Ready\x1b\\"))
+	if count != 1 {
+		t.Fatalf("expected 1 desktop notification, got %d", count)
+	}
+
+	term.SetEffectDesktopNotification(nil)
+	term.VTWrite([]byte("\x1b]9;Ignored\x1b\\"))
+	if count != 1 {
+		t.Fatalf("expected callback removal to take effect, got %d notifications", count)
+	}
+}
+
 func TestTerminalWithWritePty(t *testing.T) {
 	var received []byte
 	term, err := NewTerminal(WithSize(80, 24), WithWritePty(func(_ *Terminal, data []byte) {
