@@ -312,6 +312,88 @@ func TestTerminalSetEffectDesktopNotification(t *testing.T) {
 	}
 }
 
+func TestTerminalWithProgressReport(t *testing.T) {
+	var reports []ProgressReport
+	term, err := NewTerminal(
+		WithSize(80, 24),
+		WithProgressReport(func(_ *Terminal, report ProgressReport) {
+			reports = append(reports, report)
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	cases := []struct {
+		sequence string
+		state    ProgressState
+		progress int
+	}{
+		{"\x1b]9;4;0;\x1b\\", ProgressStateRemove, -1},
+		{"\x1b]9;4;1;42\x07", ProgressStateSet, 42},
+		{"\x1b]9;4;2;7\x1b\\", ProgressStateError, 7},
+		{"\x1b]9;4;3\x1b\\", ProgressStateIndeterminate, -1},
+		{"\x1b]9;4;4;75\x1b\\", ProgressStatePause, 75},
+	}
+
+	for i, test := range cases {
+		midpoint := len(test.sequence) / 2
+		term.VTWrite([]byte(test.sequence[:midpoint]))
+		if len(reports) != i {
+			t.Fatalf("report fired before sequence %d was complete", i)
+		}
+		term.VTWrite([]byte(test.sequence[midpoint:]))
+		if len(reports) != i+1 {
+			t.Fatalf("expected %d progress reports, got %d", i+1, len(reports))
+		}
+
+		got := reports[i]
+		if got.State != test.state {
+			t.Fatalf("report %d: expected state %d, got %d", i, test.state, got.State)
+		}
+		if test.progress < 0 {
+			if got.Progress != nil {
+				t.Fatalf("report %d: expected omitted progress, got %d", i, *got.Progress)
+			}
+		} else if got.Progress == nil || int(*got.Progress) != test.progress {
+			t.Fatalf("report %d: expected progress %d, got %v", i, test.progress, got.Progress)
+		}
+	}
+
+	// Optional progress values are Go-owned and survive later callbacks.
+	if reports[1].Progress == nil || *reports[1].Progress != 42 {
+		t.Fatalf("expected retained progress value 42, got %v", reports[1].Progress)
+	}
+}
+
+func TestTerminalSetEffectProgressReport(t *testing.T) {
+	term, err := NewTerminal(WithSize(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	var count int
+	term.SetEffectProgressReport(func(_ *Terminal, report ProgressReport) {
+		count++
+		if report.State != ProgressStateSet {
+			t.Errorf("expected set state, got %d", report.State)
+		}
+	})
+
+	term.VTWrite([]byte("\x1b]9;4;1;90\x1b\\"))
+	if count != 1 {
+		t.Fatalf("expected 1 progress report, got %d", count)
+	}
+
+	term.SetEffectProgressReport(nil)
+	term.VTWrite([]byte("\x1b]9;4;1;95\x1b\\"))
+	if count != 1 {
+		t.Fatalf("expected callback removal to take effect, got %d reports", count)
+	}
+}
+
 func TestTerminalWithWritePty(t *testing.T) {
 	var received []byte
 	term, err := NewTerminal(WithSize(80, 24), WithWritePty(func(_ *Terminal, data []byte) {

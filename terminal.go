@@ -37,6 +37,7 @@ type Terminal struct {
 	onEnquiry             EnquiryFn
 	onXtversion           XtversionFn
 	onSize                SizeFn
+	onProgressReport      ProgressReportFn
 	onColorScheme         ColorSchemeFn
 	onDeviceAttributes    DeviceAttributesFn
 
@@ -79,6 +80,7 @@ type TerminalConfig struct {
 	onEnquiry             EnquiryFn
 	onXtversion           XtversionFn
 	onSize                SizeFn
+	onProgressReport      ProgressReportFn
 	onColorScheme         ColorSchemeFn
 	onDeviceAttributes    DeviceAttributesFn
 }
@@ -187,6 +189,44 @@ type DesktopNotification struct {
 // C: GhosttyTerminalDesktopNotificationFn
 type DesktopNotificationFn func(t *Terminal, notification DesktopNotification)
 
+// ProgressState is the literal state carried by an OSC 9;4 progress report.
+// C: GhosttyTerminalProgressState
+type ProgressState int
+
+const (
+	// ProgressStateRemove removes any visible progress indication.
+	ProgressStateRemove ProgressState = C.GHOSTTY_TERMINAL_PROGRESS_STATE_REMOVE
+
+	// ProgressStateSet reports determinate progress.
+	ProgressStateSet ProgressState = C.GHOSTTY_TERMINAL_PROGRESS_STATE_SET
+
+	// ProgressStateError reports failed progress.
+	ProgressStateError ProgressState = C.GHOSTTY_TERMINAL_PROGRESS_STATE_ERROR
+
+	// ProgressStateIndeterminate reports indeterminate progress.
+	ProgressStateIndeterminate ProgressState = C.GHOSTTY_TERMINAL_PROGRESS_STATE_INDETERMINATE
+
+	// ProgressStatePause reports paused progress.
+	ProgressStatePause ProgressState = C.GHOSTTY_TERMINAL_PROGRESS_STATE_PAUSE
+)
+
+// ProgressReport is a literal OSC 9;4 progress report. Progress is nil when
+// the running program omitted a percentage; otherwise it points to a value
+// from 0 through 100.
+// C: GhosttyTerminalProgressReport
+type ProgressReport struct {
+	// State is the progress state reported by the running program.
+	State ProgressState
+
+	// Progress is the optional progress percentage.
+	Progress *uint8
+}
+
+// ProgressReportFn is called synchronously when the running program emits an
+// OSC 9;4 progress report.
+// C: GhosttyTerminalProgressReportFn
+type ProgressReportFn func(t *Terminal, report ProgressReport)
+
 // TitleChangedFn is called when the terminal title changes via OSC 0/2.
 // The parameter is the terminal that triggered the effect.
 // C: GhosttyTerminalTitleChangedFn
@@ -285,6 +325,14 @@ func WithClipboardWrite(fn ClipboardWriteFn) TerminalOption {
 func WithDesktopNotification(fn DesktopNotificationFn) TerminalOption {
 	return func(c *TerminalConfig) {
 		c.onDesktopNotification = fn
+	}
+}
+
+// WithProgressReport registers an effect handler invoked for literal OSC 9;4
+// progress reports.
+func WithProgressReport(fn ProgressReportFn) TerminalOption {
+	return func(c *TerminalConfig) {
+		c.onProgressReport = fn
 	}
 }
 
@@ -405,6 +453,7 @@ func NewTerminal(opts ...TerminalOption) (*Terminal, error) {
 		onEnquiry:             cfg.onEnquiry,
 		onXtversion:           cfg.onXtversion,
 		onSize:                cfg.onSize,
+		onProgressReport:      cfg.onProgressReport,
 		onColorScheme:         cfg.onColorScheme,
 		onDeviceAttributes:    cfg.onDeviceAttributes,
 	}

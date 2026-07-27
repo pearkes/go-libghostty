@@ -16,6 +16,7 @@ extern void goWritePtyTrampoline(GhosttyTerminal, void*, uint8_t*, size_t);
 extern void goBellTrampoline(GhosttyTerminal, void*);
 extern GhosttyClipboardWriteResult goClipboardWriteTrampoline(GhosttyTerminal, void*, GhosttyClipboardWrite*);
 extern void goDesktopNotificationTrampoline(GhosttyTerminal, void*, GhosttyTerminalDesktopNotification*);
+extern void goProgressReportTrampoline(GhosttyTerminal, void*, GhosttyTerminalProgressReport*);
 extern void goTitleChangedTrampoline(GhosttyTerminal, void*);
 extern void goPwdChangedTrampoline(GhosttyTerminal, void*);
 extern GhosttyString goEnquiryTrampoline(GhosttyTerminal, void*);
@@ -38,6 +39,9 @@ static inline GhosttyResult set_clipboard_write(GhosttyTerminal t) {
 }
 static inline GhosttyResult set_desktop_notification(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, (const void*)goDesktopNotificationTrampoline);
+}
+static inline GhosttyResult set_progress_report(GhosttyTerminal t) {
+	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, (const void*)goProgressReportTrampoline);
 }
 static inline GhosttyResult set_title_changed(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, (const void*)goTitleChangedTrampoline);
@@ -95,6 +99,11 @@ func (t *Terminal) syncEffects() {
 		C.set_desktop_notification(t.ptr)
 	} else {
 		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION)
+	}
+	if t.onProgressReport != nil {
+		C.set_progress_report(t.ptr)
+	} else {
+		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT)
 	}
 	if t.onTitleChanged != nil {
 		C.set_title_changed(t.ptr)
@@ -257,6 +266,35 @@ func goDesktopNotificationTrampoline(
 	t.onDesktopNotification(t, DesktopNotification{
 		Title: string(title),
 		Body:  string(body),
+	})
+}
+
+//export goProgressReportTrampoline
+func goProgressReportTrampoline(
+	_ C.GhosttyTerminal,
+	userdata unsafe.Pointer,
+	report *C.GhosttyTerminalProgressReport,
+) {
+	t := terminalFromUserdata(userdata)
+	if t.onProgressReport == nil {
+		return
+	}
+
+	// The report is a sized struct so newer libghostty versions can extend it
+	// without invalidating the fields this binding understands.
+	if report == nil || report.size < C.size_t(C.sizeof_GhosttyTerminalProgressReport) {
+		return
+	}
+
+	var progress *uint8
+	if report.progress >= 0 {
+		value := uint8(report.progress)
+		progress = &value
+	}
+
+	t.onProgressReport(t, ProgressReport{
+		State:    ProgressState(report.state),
+		Progress: progress,
 	})
 }
 

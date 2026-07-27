@@ -38,6 +38,13 @@ func (t *Terminal) SetEffectDesktopNotification(fn DesktopNotificationFn) {
 	t.syncEffects()
 }
 
+// SetEffectProgressReport registers (or clears) the progress-report effect on
+// a live terminal. Pass nil to clear.
+func (t *Terminal) SetEffectProgressReport(fn ProgressReportFn) {
+	t.onProgressReport = fn
+	t.syncEffects()
+}
+
 // SetEffectTitleChanged registers (or clears) the title-changed effect
 // on a live terminal. Pass nil to clear.
 func (t *Terminal) SetEffectTitleChanged(fn TitleChangedFn) {
