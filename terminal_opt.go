@@ -52,6 +52,13 @@ func (t *Terminal) SetEffectPwdChanged(fn PwdChangedFn) {
 	t.syncEffects()
 }
 
+// SetEffectModeChanged registers (or clears) the mode-changed effect on a
+// live terminal. Pass nil to clear.
+func (t *Terminal) SetEffectModeChanged(fn ModeChangedFn) {
+	t.onModeChanged = fn
+	t.syncEffects()
+}
+
 // SetEffectProgressReport registers (or clears) the progress-report effect on
 // a live terminal. Pass nil to clear.
 func (t *Terminal) SetEffectProgressReport(fn ProgressReportFn) {

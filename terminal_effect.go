@@ -18,6 +18,7 @@ extern GhosttyClipboardWriteResult goClipboardWriteTrampoline(GhosttyTerminal, v
 extern void goDesktopNotificationTrampoline(GhosttyTerminal, void*, GhosttyTerminalDesktopNotification*);
 extern void goTitleChangedTrampoline(GhosttyTerminal, void*);
 extern void goPwdChangedTrampoline(GhosttyTerminal, void*);
+extern void goModeChangedTrampoline(GhosttyTerminal, void*, GhosttyMode, bool);
 extern void goProgressReportTrampoline(GhosttyTerminal, void*, GhosttyTerminalProgressReport*);
 extern GhosttyString goEnquiryTrampoline(GhosttyTerminal, void*);
 extern GhosttyString goXtversionTrampoline(GhosttyTerminal, void*);
@@ -45,6 +46,9 @@ static inline GhosttyResult set_title_changed(GhosttyTerminal t) {
 }
 static inline GhosttyResult set_pwd_changed(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_PWD_CHANGED, (const void*)goPwdChangedTrampoline);
+}
+static inline GhosttyResult set_mode_changed(GhosttyTerminal t) {
+	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_MODE_CHANGED, (const void*)goModeChangedTrampoline);
 }
 static inline GhosttyResult set_progress_report(GhosttyTerminal t) {
 	return ghostty_terminal_set(t, GHOSTTY_TERMINAL_OPT_PROGRESS_REPORT, (const void*)goProgressReportTrampoline);
@@ -109,6 +113,11 @@ func (t *Terminal) syncEffects() {
 		C.set_pwd_changed(t.ptr)
 	} else {
 		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_PWD_CHANGED)
+	}
+	if t.onModeChanged != nil {
+		C.set_mode_changed(t.ptr)
+	} else {
+		C.clear_effect(t.ptr, C.GHOSTTY_TERMINAL_OPT_MODE_CHANGED)
 	}
 	if t.onProgressReport != nil {
 		C.set_progress_report(t.ptr)
@@ -285,6 +294,19 @@ func goPwdChangedTrampoline(_ C.GhosttyTerminal, userdata unsafe.Pointer) {
 	t := terminalFromUserdata(userdata)
 	if t.onPwdChanged != nil {
 		t.onPwdChanged(t)
+	}
+}
+
+//export goModeChangedTrampoline
+func goModeChangedTrampoline(
+	_ C.GhosttyTerminal,
+	userdata unsafe.Pointer,
+	mode C.GhosttyMode,
+	enabled C.bool,
+) {
+	t := terminalFromUserdata(userdata)
+	if t.onModeChanged != nil {
+		t.onModeChanged(t, Mode(mode), bool(enabled))
 	}
 }
 

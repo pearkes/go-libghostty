@@ -142,6 +142,30 @@ func TestTerminalSetEffectBell(t *testing.T) {
 	}
 }
 
+func TestTerminalSetEffectModeChanged(t *testing.T) {
+	term, err := NewTerminal(WithSize(80, 24))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	var changes int
+	term.SetEffectModeChanged(func(_ *Terminal, _ Mode, _ bool) {
+		changes++
+	})
+
+	term.VTWrite([]byte("\x1b[?1004h"))
+	if changes != 1 {
+		t.Fatalf("expected 1 mode change, got %d", changes)
+	}
+
+	term.SetEffectModeChanged(nil)
+	term.VTWrite([]byte("\x1b[?1004l"))
+	if changes != 1 {
+		t.Fatalf("expected still 1 mode change after clearing, got %d", changes)
+	}
+}
+
 func TestTerminalWithClipboardWrite(t *testing.T) {
 	var writes []ClipboardWrite
 	term, err := NewTerminal(

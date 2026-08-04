@@ -34,6 +34,7 @@ type Terminal struct {
 	onDesktopNotification DesktopNotificationFn
 	onTitleChanged        TitleChangedFn
 	onPwdChanged          PwdChangedFn
+	onModeChanged         ModeChangedFn
 	onProgressReport      ProgressReportFn
 	onEnquiry             EnquiryFn
 	onXtversion           XtversionFn
@@ -82,6 +83,7 @@ type TerminalConfig struct {
 	onDesktopNotification DesktopNotificationFn
 	onTitleChanged        TitleChangedFn
 	onPwdChanged          PwdChangedFn
+	onModeChanged         ModeChangedFn
 	onProgressReport      ProgressReportFn
 	onEnquiry             EnquiryFn
 	onXtversion           XtversionFn
@@ -205,6 +207,13 @@ type TitleChangedFn func(t *Terminal)
 // to read the new value.
 // C: GhosttyTerminalPwdChangedFn
 type PwdChangedFn func(t *Terminal)
+
+// ModeChangedFn is called after the terminal applies a stream-driven mode
+// transition. It runs synchronously inside VTWrite under the same rules as
+// every other effect: it may query the passed Terminal (for example with
+// ModeGet), but it must not mutate the terminal and must return quickly.
+// C: GhosttyTerminalModeChangedFn
+type ModeChangedFn func(t *Terminal, mode Mode, enabled bool)
 
 // TerminalProgressState identifies the state of a progress report emitted by
 // the running program.
@@ -358,6 +367,15 @@ func WithPwdChanged(fn PwdChangedFn) TerminalOption {
 	}
 }
 
+// WithModeChanged registers an effect handler invoked after a stream-driven
+// terminal mode transition. Redundant sets and host-initiated ModeSet calls
+// do not invoke the handler.
+func WithModeChanged(fn ModeChangedFn) TerminalOption {
+	return func(c *TerminalConfig) {
+		c.onModeChanged = fn
+	}
+}
+
 // WithProgressReport registers an effect handler invoked for progress reports
 // received via OSC 9;4.
 func WithProgressReport(fn ProgressReportFn) TerminalOption {
@@ -488,6 +506,7 @@ func terminalFromC(cterm C.GhosttyTerminal, cfg TerminalConfig) *Terminal {
 		onDesktopNotification: cfg.onDesktopNotification,
 		onTitleChanged:        cfg.onTitleChanged,
 		onPwdChanged:          cfg.onPwdChanged,
+		onModeChanged:         cfg.onModeChanged,
 		onProgressReport:      cfg.onProgressReport,
 		onEnquiry:             cfg.onEnquiry,
 		onXtversion:           cfg.onXtversion,

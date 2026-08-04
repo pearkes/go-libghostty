@@ -3,9 +3,14 @@ project(go-libghostty LANGUAGES C)
 
 include(FetchContent)
 FetchContent_Declare(ghostty
-    GIT_REPOSITORY https://github.com/ghostty-org/ghostty.git
-    GIT_TAG 7e50356642afead216a35c8968f4c33cb38d7f04
+    GIT_REPOSITORY https://github.com/pearkes/ghostty.git
+    GIT_TAG 6b47ccaf55dfc52ec3fc8fed9e2bfb339c400b39
 )
+# This binding consumes the native libraries directly. Building an Apple
+# XCFramework adds unrelated packaging work and may select an incompatible
+# xcodebuild shim from the surrounding toolchain.
+set(GHOSTTY_ZIG_BUILD_FLAGS "-Demit-xcframework=false" CACHE STRING
+    "Additional flags to pass to the Ghostty Zig build")
 FetchContent_MakeAvailable(ghostty)
 
 # Optional cross-compilation targets.

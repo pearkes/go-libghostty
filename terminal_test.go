@@ -233,3 +233,102 @@ func TestTerminalModeVTWrite(t *testing.T) {
 		})
 	}
 }
+
+func TestTerminalModeChanged(t *testing.T) {
+	type modeEvent struct {
+		mode     Mode
+		enabled  bool
+		observed bool
+	}
+
+	var (
+		term        *Terminal
+		events      []modeEvent
+		callbackErr error
+		order       []byte
+	)
+	term, err := NewTerminal(
+		WithSize(80, 24),
+		WithModeChanged(func(got *Terminal, mode Mode, enabled bool) {
+			observed, err := got.ModeGet(mode)
+			if err != nil && callbackErr == nil {
+				callbackErr = err
+			}
+			if got != term && callbackErr == nil {
+				callbackErr = fmt.Errorf("callback terminal = %p, want %p", got, term)
+			}
+			events = append(events, modeEvent{mode, enabled, observed})
+			if mode == ModeFocusEvent {
+				if enabled {
+					order = append(order, 'M')
+				} else {
+					order = append(order, 'm')
+				}
+			}
+		}),
+		WithBell(func(_ *Terminal) {
+			order = append(order, 'B')
+		}),
+		WithTitleChanged(func(_ *Terminal) {
+			order = append(order, 'T')
+		}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+
+	// DECSET reports a transition after the new value is observable.
+	term.VTWrite([]byte("\x1b[?1004h"))
+	if callbackErr != nil {
+		t.Fatal(callbackErr)
+	}
+	if len(events) != 1 || events[0] != (modeEvent{ModeFocusEvent, true, true}) {
+		t.Fatalf("DECSET events = %#v", events)
+	}
+
+	// A redundant DECSET is silent, while DECRST reports the reset value.
+	term.VTWrite([]byte("\x1b[?1004h"))
+	if len(events) != 1 {
+		t.Fatalf("redundant DECSET produced events: %#v", events)
+	}
+	term.VTWrite([]byte("\x1b[?1004l"))
+	if len(events) != 2 || events[1] != (modeEvent{ModeFocusEvent, false, false}) {
+		t.Fatalf("DECRST events = %#v", events)
+	}
+
+	// DECSAVE is silent. DECRESTORE fires only when the restored value differs.
+	term.VTWrite([]byte("\x1b[?1004s"))
+	term.VTWrite([]byte("\x1b[?1004h"))
+	term.VTWrite([]byte("\x1b[?1004r"))
+	term.VTWrite([]byte("\x1b[?1004r"))
+	if len(events) != 4 || events[2] != (modeEvent{ModeFocusEvent, true, true}) ||
+		events[3] != (modeEvent{ModeFocusEvent, false, false}) {
+		t.Fatalf("save/restore events = %#v", events)
+	}
+
+	// ANSI modes preserve their packed ANSI bit through the callback.
+	term.VTWrite([]byte("\x1b[4h"))
+	if len(events) != 5 || events[4] != (modeEvent{ModeInsert, true, true}) {
+		t.Fatalf("ANSI mode events = %#v", events)
+	}
+
+	// Host-initiated mode changes and resets do not synthesize effects.
+	if err := term.ModeSet(ModeFocusEvent, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.ModeSet(ModeFocusEvent, false); err != nil {
+		t.Fatal(err)
+	}
+	term.Reset()
+	if len(events) != 5 {
+		t.Fatalf("host operations produced events: %#v", events)
+	}
+
+	// Effects from a single write stay in parser order.
+	order = nil
+	term.VTWrite([]byte("\x1b[?1004h\x07\x1b]2;mode order\x1b\\\x1b[?1004l"))
+	if string(order) != "MBTm" {
+		t.Fatalf("effect order = %q, want %q", order, "MBTm")
+	}
+}
